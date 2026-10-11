@@ -1,0 +1,26 @@
+classDiagram
+    direction LR
+    class ParkingLot
+    class ParkingFloor
+    class ParkingSpot {
+        type: SMALL | MEDIUM | LARGE
+        parkedVehicle
+    }
+    class Vehicle {
+        licensePlate
+        type: BIKE | CAR | TRUCK
+    }
+    class Ticket {
+        entryTime
+        status
+    }
+    class Payment {
+        amount
+        mode: CASH | CARD | UPI
+    }
+    ParkingLot "1" *-- "many" ParkingFloor
+    ParkingFloor "1" *-- "many" ParkingSpot
+    ParkingSpot "1" o-- "0..1" Vehicle
+    Ticket --> Vehicle
+    Ticket --> ParkingSpot
+    Ticket --> "0..1" Payment

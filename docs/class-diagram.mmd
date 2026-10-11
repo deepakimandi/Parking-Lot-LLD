@@ -1,0 +1,182 @@
+classDiagram
+    direction TB
+
+    class ParkingLotApplication {
+        <<composition root>>
+        +withDefaults(lot, clock)$ ParkingLotApplication
+        +entryGate(id) EntryGate
+        +exitGate(id) ExitGate
+    }
+    class EntryGate {
+        -String id
+        +enter(Vehicle) Ticket
+    }
+    class ExitGate {
+        -String id
+        +showFee(ticketId) BigDecimal
+        +exit(ticketId, PaymentMode) Receipt
+    }
+    class ParkingService {
+        <<facade>>
+        -Set~String~ platesInside
+        +park(Vehicle, gateId) Ticket
+        +quote(ticketId) BigDecimal
+        +checkout(ticketId, PaymentMode, gateId) Receipt
+    }
+
+    class ParkingLot {
+        -String name
+        -List~ParkingFloor~ floors
+        +builder(name)$ Builder
+        +floor(int) ParkingFloor
+        +freeCount(SpotType) int
+    }
+    class ParkingFloor {
+        -int floorNumber
+        -List~ParkingSpot~ spots
+        -Map~SpotType, ConcurrentSkipListSet~ freeSpots
+        +tryAllocate(SpotType, Vehicle) Optional~ParkingSpot~
+        +release(ParkingSpot, Vehicle)
+        +freeCount(SpotType) int
+    }
+    class ParkingSpot {
+        -String id
+        -int floorNumber
+        -int number
+        -SpotType type
+        -AtomicReference~Vehicle~ parkedVehicle
+        +tryOccupy(Vehicle) boolean
+        +release(Vehicle) boolean
+        +isFree() boolean
+    }
+    class Vehicle {
+        <<record>>
+        +String licensePlate
+        +VehicleType type
+    }
+    class VehicleType {
+        <<enum>>
+        BIKE
+        CAR
+        TRUCK
+        +fittingSpots() List~SpotType~
+        +fitsIn(SpotType) boolean
+    }
+    class SpotType {
+        <<enum>>
+        SMALL
+        MEDIUM
+        LARGE
+    }
+    class Ticket {
+        -String id
+        -Vehicle vehicle
+        -ParkingSpot spot
+        -Instant entryTime
+        -AtomicReference~TicketStatus~ status
+        -Instant exitTime
+        -Payment payment
+        +tryBeginCheckout() boolean
+        +abortCheckout()
+        +markPaid(Payment, Instant)
+    }
+    class TicketStatus {
+        <<enum>>
+        ACTIVE
+        CHECKOUT_IN_PROGRESS
+        PAID
+    }
+    class Payment {
+        <<record>>
+        +String id
+        +String ticketId
+        +BigDecimal amount
+        +PaymentMode mode
+        +PaymentStatus status
+    }
+    class Receipt {
+        <<record>>
+    }
+
+    class SpotAllocationStrategy {
+        <<interface>>
+        +allocate(floors, Vehicle) Optional~ParkingSpot~
+    }
+    class BestFitStrategy
+    class NearestFloorStrategy
+
+    class PricingStrategy {
+        <<interface>>
+        +calculateFee(VehicleType, Duration) BigDecimal
+    }
+    class HourlyPricingStrategy
+    class DailyCappedPricingStrategy
+
+    class PaymentService {
+        -Map~PaymentMode, PaymentProcessor~ processors
+        +pay(ticketId, amount, PaymentMode) Payment
+    }
+    class PaymentProcessor {
+        <<interface>>
+        +mode() PaymentMode
+        +charge(ref, amount) boolean
+    }
+    class CashPaymentProcessor
+    class CardPaymentProcessor
+    class UpiPaymentProcessor
+
+    class TicketRepository {
+        <<interface>>
+        +save(Ticket)
+        +findById(id) Optional~Ticket~
+    }
+    class InMemoryTicketRepository
+
+    class EventPublisher {
+        -CopyOnWriteArrayList listeners
+        +subscribe(ParkingEventListener)
+        +publish(ParkingEvent)
+    }
+    class ParkingEventListener {
+        <<interface>>
+        +onEvent(ParkingEvent)
+    }
+    class DisplayBoard
+
+    ParkingLotApplication ..> ParkingService : wires
+    ParkingLotApplication ..> EntryGate : creates
+    ParkingLotApplication ..> ExitGate : creates
+    EntryGate --> ParkingService
+    ExitGate --> ParkingService
+
+    ParkingService --> ParkingLot
+    ParkingService --> SpotAllocationStrategy
+    ParkingService --> PricingStrategy
+    ParkingService --> PaymentService
+    ParkingService --> TicketRepository
+    ParkingService --> EventPublisher
+
+    ParkingLot "1" *-- "1..*" ParkingFloor
+    ParkingFloor "1" *-- "1..*" ParkingSpot
+    ParkingSpot --> SpotType
+    ParkingSpot o-- "0..1" Vehicle : parkedVehicle
+    Vehicle --> VehicleType
+    VehicleType ..> SpotType : fits in
+
+    Ticket --> Vehicle
+    Ticket --> ParkingSpot
+    Ticket --> TicketStatus
+    Ticket --> "0..1" Payment
+
+    SpotAllocationStrategy <|.. BestFitStrategy
+    SpotAllocationStrategy <|.. NearestFloorStrategy
+    PricingStrategy <|.. HourlyPricingStrategy
+    PricingStrategy <|.. DailyCappedPricingStrategy
+    PaymentService o-- "1..*" PaymentProcessor
+    PaymentProcessor <|.. CashPaymentProcessor
+    PaymentProcessor <|.. CardPaymentProcessor
+    PaymentProcessor <|.. UpiPaymentProcessor
+    TicketRepository <|.. InMemoryTicketRepository
+    EventPublisher o-- "*" ParkingEventListener
+    ParkingEventListener <|.. DisplayBoard
+    ParkingService ..> Receipt : returns

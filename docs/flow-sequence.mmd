@@ -1,0 +1,42 @@
+sequenceDiagram
+    autonumber
+    actor D as Driver
+    participant EG as EntryGate
+    participant PS as ParkingService
+    participant AS as SpotAllocationStrategy
+    participant F as ParkingFloor
+    participant XG as ExitGate
+    participant PR as PricingStrategy
+    participant PAY as PaymentService
+    participant EV as EventPublisher
+
+    Note over D,EV: Entry
+    D->>EG: enter(vehicle)
+    EG->>PS: park(vehicle, gateId)
+    PS->>PS: platesInside.add(plate)  [false -> VehicleAlreadyParked]
+    PS->>AS: allocate(floors, vehicle)
+    AS->>F: tryAllocate(type, vehicle)
+    F->>F: freeSpots[type].pollFirst()  (atomic)
+    F->>F: spot.tryOccupy(vehicle)  (CAS null -> vehicle)
+    F-->>AS: spot
+    AS-->>PS: spot  [empty -> undo plate, ParkingFull]
+    PS->>PS: new Ticket(ACTIVE), save
+    PS->>EV: publish(VEHICLE_PARKED)
+    PS-->>D: ticket (barrier opens)
+
+    Note over D,EV: Exit
+    D->>XG: exit(ticketId, mode)
+    XG->>PS: checkout(ticketId, mode, gateId)
+    PS->>PS: ticket.tryBeginCheckout()  (CAS ACTIVE -> CHECKOUT_IN_PROGRESS)
+    PS->>PR: calculateFee(type, now - entryTime)
+    PS->>PAY: pay(ticketId, fee, mode)
+    alt payment failed
+        PS->>PS: ticket.abortCheckout()  (back to ACTIVE)
+        PS-->>D: PaymentFailed (barrier stays closed)
+    else success
+        PS->>PS: ticket.markPaid()  (-> PAID)
+        PS->>F: release(spot, vehicle)  (CAS, then back to pool)
+        PS->>PS: platesInside.remove(plate)
+        PS->>EV: publish(VEHICLE_EXITED)
+        PS-->>D: receipt (barrier opens)
+    end

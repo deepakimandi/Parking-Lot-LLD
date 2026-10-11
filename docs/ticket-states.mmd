@@ -1,0 +1,7 @@
+stateDiagram-v2
+    direction LR
+    [*] --> ACTIVE : park() issues ticket
+    ACTIVE --> CHECKOUT_IN_PROGRESS : tryBeginCheckout() CAS
+    CHECKOUT_IN_PROGRESS --> ACTIVE : payment failed / error
+    CHECKOUT_IN_PROGRESS --> PAID : markPaid()
+    PAID --> [*] : spot released, plate freed
